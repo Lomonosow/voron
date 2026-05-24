@@ -1,0 +1,19 @@
+# Klipper auto-generated config backups
+printer-*.cfg
+
+# Resonance test output
+adxl_results/
+
+# Mainsail-managed file (auto-generated, not hand-edited)
+mainsail.cfg
+
+# Slicer files
+*.3mf
+*.orca_printer
+
+# Model and static asset directories
+models/
+static/
+
+# Nested config subdirectory (auto-generated)
+config/
