@@ -56,7 +56,7 @@ Pauses the print: short retract, lifts Z, parks at purge bucket, long retract to
 **`RESUME`**
 Resumes from pause. Waits for extruder to reach minimum extrude temperature before restoring position.
 
-**`PRINT_CANCEL [Z_LIFT=20]`**
+**`CANCEL_PRINT [Z_LIFT=20]`**
 Cancels the print: lifts Z safely within axis limits, turns off all heaters and fans, parks.
 
 ---
