@@ -47,7 +47,9 @@ class ChamberControl:
             raise config.error("on_disable must be 'default', 'idle', or 'off'")
         self.on_disable = on_disable
 
-        self.sensor = None
+        self.sensor          = None
+        self.heater_fan_objs = []
+        self.exhaust_fan_obj = None
 
         self.gcode.register_command(
             'SET_CHAMBER_TEMP', self.cmd_SET_CHAMBER_TEMP,
@@ -58,13 +60,19 @@ class ChamberControl:
     def _handle_ready(self):
         self.sensor = self.printer.lookup_object(
             'temperature_sensor %s' % self.sensor_name)
+        self.heater_fan_objs = [
+            self.printer.lookup_object('fan_generic %s' % n)
+            for n in self.heater_fan_names
+        ]
+        self.exhaust_fan_obj = self.printer.lookup_object(
+            'fan_generic %s' % self.exhaust_fan_name)
         reactor = self.printer.get_reactor()
         reactor.register_timer(self._callback,
                                reactor.monotonic() + self.update_interval)
 
-    def _set_fan(self, name, speed):
-        self.gcode.run_script_from_command(
-            'SET_FAN_SPEED FAN=%s SPEED=%.3f' % (name, speed))
+    def _set_fan(self, fan_obj, speed):
+        # Use fan object directly — avoids gcode processing and busy state in UI
+        fan_obj.fan.set_speed_from_command(speed)
 
     def _callback(self, eventtime):
         if self.target_temp <= 0. or self.sensor is None:
@@ -80,19 +88,19 @@ class ChamberControl:
         if error > self.deadband:
             undershoot   = error - self.deadband
             heater_speed = min(1., undershoot / self.deadband) * self.max_speed
-            for name in self.heater_fan_names:
-                self._set_fan(name, heater_speed)
-            self._set_fan(self.exhaust_fan_name, self.idle_speed)
+            for obj in self.heater_fan_objs:
+                self._set_fan(obj, heater_speed)
+            self._set_fan(self.exhaust_fan_obj, self.idle_speed)
         elif error < -self.deadband:
             overshoot = -error - self.deadband
             exhaust   = min(1., overshoot / self.deadband) * self.max_speed
-            for name in self.heater_fan_names:
-                self._set_fan(name, self.idle_speed)
-            self._set_fan(self.exhaust_fan_name, exhaust)
+            for obj in self.heater_fan_objs:
+                self._set_fan(obj, self.idle_speed)
+            self._set_fan(self.exhaust_fan_obj, exhaust)
         else:
-            for name in self.heater_fan_names:
-                self._set_fan(name, self.idle_speed)
-            self._set_fan(self.exhaust_fan_name, self.idle_speed)
+            for obj in self.heater_fan_objs:
+                self._set_fan(obj, self.idle_speed)
+            self._set_fan(self.exhaust_fan_obj, self.idle_speed)
 
         return eventtime + self.update_interval
 
@@ -101,13 +109,13 @@ class ChamberControl:
         self.target_temp = target
         if target <= 0.:
             if self.on_disable == 'off':
-                for name in self.heater_fan_names:
-                    self._set_fan(name, 0.)
-                self._set_fan(self.exhaust_fan_name, 0.)
+                for obj in self.heater_fan_objs:
+                    self._set_fan(obj, 0.)
+                self._set_fan(self.exhaust_fan_obj, 0.)
             elif self.on_disable == 'idle':
-                for name in self.heater_fan_names:
-                    self._set_fan(name, self.idle_speed)
-                self._set_fan(self.exhaust_fan_name, self.idle_speed)
+                for obj in self.heater_fan_objs:
+                    self._set_fan(obj, self.idle_speed)
+                self._set_fan(self.exhaust_fan_obj, self.idle_speed)
             gcmd.respond_info("Chamber control disabled")
         else:
             gcmd.respond_info("Chamber target: %.1f C" % target)
