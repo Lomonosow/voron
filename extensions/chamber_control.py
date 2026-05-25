@@ -79,7 +79,7 @@ class ChamberControl:
             return
         self._last_speeds[id(fan_obj)] = speed
         if print_time is not None:
-            fan_obj.fan.set_speed(print_time, speed)
+            fan_obj.fan.set_speed(speed, print_time)
         else:
             fan_obj.fan.set_speed_from_command(speed)
 
@@ -93,7 +93,7 @@ class ChamberControl:
             return eventtime + self.update_interval
 
         error      = self.target_temp - current_temp
-        print_time = self.mcu.estimated_print_time(eventtime) + self.update_interval
+        print_time = self.mcu.estimated_print_time(eventtime) + 0.1
 
         if error > self.deadband:
             undershoot   = error - self.deadband
