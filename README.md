@@ -1,5 +1,16 @@
 # Voron 2.4 350mm — Klipper Configuration
 
+## Installation
+
+After cloning to `~/printer_data/config`, symlink the Klipper extension:
+
+```bash
+ln -sf ~/printer_data/config/extensions/auto_chopper_tune.py \
+       ~/klipper/klippy/extras/auto_chopper_tune.py
+```
+
+Then restart Klipper.
+
 ## Hardware
 
 | Component | Part |
@@ -62,6 +73,18 @@ Cancels the print: lifts Z safely within axis limits, turns off all heaters and 
 ---
 
 ### Calibration
+
+**`AUTO_CHOPPER_TUNE AXIS=X [SAVE=1]`**
+Full automatic TMC chopper register tuning. Phase 1 sweeps speeds to find the resonant peak. Phase 2 sweeps all TBL/TOFF/HSTRT/HEND combinations at that speed. Phase 3 sweeps TPFD (TMC2240/5160 only). Applies the best result live; `SAVE=1` stages values for `SAVE_CONFIG`.
+
+**`CHOPPER_FIND_VIBRATIONS AXIS=X`**
+Phase 1 only. Runs with current driver registers and reports the resonant speed.
+
+**`CHOPPER_SWEEP AXIS=X SPEED=55`**
+Phase 2 only. Sweeps all register combinations at the given speed. Accepts `TBL_MIN/MAX`, `TOFF_MIN/MAX`, `HSTRT_MIN/MAX`, `HEND_MIN/MAX` to narrow the search range.
+
+**`CHOPPER_APPLY AXIS=X TBL=0 TOFF=8 HSTRT=5 HEND=5 [TPFD=3] [SAVE=1]`**
+Apply a specific register set to the driver live without running a sweep.
 
 **`CALIBRATE_ALL [HOTEND=260] [BED=110] [PID=0]`**
 First-boot calibration sequence. Optionally runs PID tuning for hotend and bed (`PID=1`), then runs input shaper calibration (ADXL345) and a full 9x9 bed mesh. Saves all results and restarts Klipper.
