@@ -93,7 +93,7 @@ class ChamberControl:
             return eventtime + self.update_interval
 
         error      = self.target_temp - current_temp
-        print_time = self.mcu.estimated_print_time(eventtime) + 0.1
+        print_time = self.mcu.estimated_print_time(eventtime) + self.update_interval
 
         if error > self.deadband:
             undershoot   = error - self.deadband
