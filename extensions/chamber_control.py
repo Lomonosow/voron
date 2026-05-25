@@ -48,8 +48,10 @@ class ChamberControl:
         self.on_disable = on_disable
 
         self.sensor          = None
+        self.mcu             = None
         self.heater_fan_objs = []
         self.exhaust_fan_obj = None
+        self._last_speeds    = {}  # id(fan_obj) -> last speed written
 
         self.gcode.register_command(
             'SET_CHAMBER_TEMP', self.cmd_SET_CHAMBER_TEMP,
@@ -60,6 +62,7 @@ class ChamberControl:
     def _handle_ready(self):
         self.sensor = self.printer.lookup_object(
             'temperature_sensor %s' % self.sensor_name)
+        self.mcu = self.printer.lookup_object('mcu')
         self.heater_fan_objs = [
             self.printer.lookup_object('fan_generic %s' % n)
             for n in self.heater_fan_names
@@ -70,9 +73,15 @@ class ChamberControl:
         reactor.register_timer(self._callback,
                                reactor.monotonic() + self.update_interval)
 
-    def _set_fan(self, fan_obj, speed):
-        # Use fan object directly — avoids gcode processing and busy state in UI
-        fan_obj.fan.set_speed_from_command(speed)
+    def _set_fan(self, fan_obj, speed, print_time=None):
+        speed = round(speed, 3)
+        if self._last_speeds.get(id(fan_obj)) == speed:
+            return
+        self._last_speeds[id(fan_obj)] = speed
+        if print_time is not None:
+            fan_obj.fan.set_speed(print_time, speed)
+        else:
+            fan_obj.fan.set_speed_from_command(speed)
 
     def _callback(self, eventtime):
         if self.target_temp <= 0. or self.sensor is None:
@@ -83,24 +92,25 @@ class ChamberControl:
         except Exception:
             return eventtime + self.update_interval
 
-        error = self.target_temp - current_temp
+        error      = self.target_temp - current_temp
+        print_time = self.mcu.estimated_print_time(eventtime) + 0.1
 
         if error > self.deadband:
             undershoot   = error - self.deadband
             heater_speed = min(1., undershoot / self.deadband) * self.max_speed
             for obj in self.heater_fan_objs:
-                self._set_fan(obj, heater_speed)
-            self._set_fan(self.exhaust_fan_obj, self.idle_speed)
+                self._set_fan(obj, heater_speed, print_time)
+            self._set_fan(self.exhaust_fan_obj, self.idle_speed, print_time)
         elif error < -self.deadband:
             overshoot = -error - self.deadband
             exhaust   = min(1., overshoot / self.deadband) * self.max_speed
             for obj in self.heater_fan_objs:
-                self._set_fan(obj, self.idle_speed)
-            self._set_fan(self.exhaust_fan_obj, exhaust)
+                self._set_fan(obj, self.idle_speed, print_time)
+            self._set_fan(self.exhaust_fan_obj, exhaust, print_time)
         else:
             for obj in self.heater_fan_objs:
-                self._set_fan(obj, self.idle_speed)
-            self._set_fan(self.exhaust_fan_obj, self.idle_speed)
+                self._set_fan(obj, self.idle_speed, print_time)
+            self._set_fan(self.exhaust_fan_obj, self.idle_speed, print_time)
 
         return eventtime + self.update_interval
 
