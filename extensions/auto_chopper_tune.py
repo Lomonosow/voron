@@ -13,6 +13,9 @@
 # printer.cfg:
 #   [auto_chopper_tune]
 #   accel_chip: adxl345
+#   min_speed: 25     # mm/s — start of sweep range
+#   max_speed: 100    # mm/s — end of sweep range
+#   speed_step: 1     # mm/s — step between sweep points
 #
 # Commands:
 #   AUTO_CHOPPER_TUNE AXIS=X [SAVE=1]         - full pipeline
@@ -38,9 +41,9 @@ class AutoChopperTune:
         self.measure_time    = config.getfloat('measure_time', 1.25, above=0.)
         self.iterations      = config.getint('iterations', 1, minval=1)
         self.inset           = config.getfloat('inset', 10., above=0.)
-        self.min_rpm         = config.getfloat('min_rpm', 37.5, above=0.)
-        self.max_rpm         = config.getfloat('max_rpm', 150., above=0.)
-        self.rpm_step        = config.getfloat('rpm_step', 1.5, above=0.)
+        self.min_speed       = config.getfloat('min_speed', 25., above=0.)
+        self.max_speed       = config.getfloat('max_speed', 100., above=0.)
+        self.speed_step      = config.getfloat('speed_step', 1., above=0.)
 
         self.gcode.register_command(
             'AUTO_CHOPPER_TUNE', self.cmd_AUTO_CHOPPER_TUNE,
@@ -101,8 +104,8 @@ class AutoChopperTune:
 
     def _get_axis_limits(self, axis):
         """Return (pos_min + inset, pos_max - inset) from static config."""
-        settings = self.printer.lookup_object('configfile').get_status(None)['settings']
-        s = settings['stepper_%s' % axis]
+        cfg = self.printer.lookup_object('configfile').get_status(None)['config']
+        s   = cfg['stepper_%s' % axis]
         return float(s['position_min']) + self.inset, float(s['position_max']) - self.inset
 
     def _get_other_axis_mid(self, axis):
@@ -130,27 +133,16 @@ class AutoChopperTune:
                 "Lower speed or raise max_accel." % (speed, required, available))
         return required
 
-    def _rpm_to_speed(self, rpm, stepper_name):
-        """Motor shaft RPM -> linear mm/s, accounting for gear ratio and step angle."""
-        s = self.printer.lookup_object('configfile').get_status(None)['settings'][stepper_name]
-        rotation_dist = float(s['rotation_distance'])
-        full_steps    = int(s.get('full_steps_per_rotation', 200))
-        gr_str        = s.get('gear_ratio', '1:1')
-        gr            = float(gr_str.split(':')[0]) / float(gr_str.split(':')[1])
-        # full_steps/200 normalises 0.9deg motors (400 steps) vs 1.8deg (200 steps)
-        return (rpm / 60.) * (full_steps / 200.) * rotation_dist / gr
-
-    def _build_speed_list(self, stepper_name, pos_min, pos_max):
-        """All valid speeds (fit within axis travel) from RPM config range."""
-        speeds, rpm = [], self.min_rpm
-        while rpm <= self.max_rpm + 1e-6:
-            spd = self._rpm_to_speed(rpm, stepper_name)
+    def _build_speed_list(self, pos_min, pos_max):
+        """All valid speeds (fit within axis travel) from configured speed range."""
+        speeds, spd = [], self.min_speed
+        while spd <= self.max_speed + 1e-6:
             try:
                 self._calc_travel(spd, pos_min, pos_max)
                 speeds.append(spd)
             except Exception:
                 pass
-            rpm += self.rpm_step
+            spd += self.speed_step
         if not speeds:
             raise self.gcode.error("No valid speeds fit within axis travel range")
         return speeds
@@ -282,9 +274,8 @@ class AutoChopperTune:
     def _phase_find_vibrations(self, axis, chip, gcmd):
         """Phase 1: sweep speeds with current driver registers; return resonant speed (peak magnitude)."""
         ax_idx  = AXIS_IDX[axis]
-        stepper = 'stepper_%s' % axis
         pos_min, pos_max = self._get_axis_limits(axis)
-        speeds    = self._build_speed_list(stepper, pos_min, pos_max)
+        speeds    = self._build_speed_list(pos_min, pos_max)
         ret_speed = min(self._toolhead_info()['max_velocity'], max(speeds) * 3.)
 
         self._position_for_sweep(ax_idx, pos_min, axis)
@@ -423,6 +414,7 @@ class AutoChopperTune:
     def cmd_FIND_VIBRATIONS(self, gcmd):
         axis = gcmd.get('AXIS', 'X').lower()
         chip = self._get_accel_chip()
+        self._ensure_homed(gcmd)
         shaper = self._disable_input_shaper()
         try:
             self._phase_find_vibrations(axis, chip, gcmd)
@@ -435,6 +427,7 @@ class AutoChopperTune:
         chip  = self._get_accel_chip()
         if speed is None:
             raise self.gcode.error("SPEED is required for CHOPPER_SWEEP")
+        self._ensure_homed(gcmd)
         shaper = self._disable_input_shaper()
         try:
             best = self._phase_sweep_registers(axis, chip, speed, gcmd)
