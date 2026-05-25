@@ -7,6 +7,8 @@ After cloning to `~/printer_data/config`, symlink the Klipper extension:
 ```bash
 ln -sf ~/printer_data/config/extensions/auto_chopper_tune.py \
        ~/klipper/klippy/extras/auto_chopper_tune.py
+ln -sf ~/printer_data/config/extensions/chamber_control.py \
+       ~/klipper/klippy/extras/chamber_control.py
 ```
 
 Then restart Klipper.
@@ -105,8 +107,8 @@ Homes all axes. Wrapper around `G28` for console/button use.
 **`CLEAN_NOZZLE [EXTRUDE=false]`**
 Wipes the nozzle on the purge bucket. Pass `EXTRUDE=true` to purge 20mm of filament before wiping. Safe to run at hold temperature (140C) only — running at print temperature risks PEI damage at Y350.
 
-**`PREHEAT_ASA`**
-Heats bed to 100C, starts Nevermore and Evenmore filters, waits for chamber to reach 45C. Hotend held at 150C to prevent cold-pull.
+**`SET_CHAMBER_TEMP TARGET=45`**
+Enable chamber temperature control. Runs Nevermore and Evenmore at full speed while below target, holds them at idle speed (filtration) when at target, and opens the exhaust fan proportionally if the chamber overshoots. `TARGET=0` disables control and leaves fans at their current speed.
 
 ---
 
