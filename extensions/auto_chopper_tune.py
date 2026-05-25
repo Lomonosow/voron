@@ -4,7 +4,11 @@
 # vibration magnitude via ADXL345. Finds and applies the register set with
 # the lowest median RMS magnitude at the motor's resonant speed.
 #
-# Based on analysis logic from chopper-resonance-tuner by MRX8024.
+# Credits:
+#   MRX8024 — chopper-resonance-tuner (original measurement and scoring logic)
+#     https://github.com/MRX8024/chopper-resonance-tuner
+#   Klipper project — accelerometer and TMC driver APIs
+#     https://github.com/Klipper3d/klipper
 #
 # Install:
 #   ln -sf ~/printer_data/config/extensions/auto_chopper_tune.py \
